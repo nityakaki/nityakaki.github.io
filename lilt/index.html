@@ -186,6 +186,24 @@ h3 small{font-family:var(--body);font-weight:500;font-size:12px;color:var(--soft
 textarea{width:100%;border:1.5px solid var(--ink);border-radius:12px;background:var(--card);padding:10px;font:13px var(--body);resize:none;height:64px;outline:none}
 .fight{display:flex;align-items:center;gap:8px;font-size:13px}
 .fight .sc{width:34px;height:34px;font-size:12px}
+/* breakdown */
+.asp{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}
+.asp:last-child{border-bottom:0}
+.asp span{font-weight:600;font-size:14px}
+.asp span small{display:block;font-weight:500;color:var(--soft);font-size:12px}
+.dots{display:flex;gap:6px;flex:none}
+.dots button{width:26px;height:26px;border-radius:50%;border:1.5px solid var(--ink);background:var(--card);padding:0;transition:transform .1s,background .15s}
+.dots button.on{background:var(--accent)}
+.dots button:active{transform:scale(.85)}
+.moodchips{display:flex;gap:7px;flex-wrap:wrap}
+.moodchips .pill{font-size:12.5px;padding:6px 11px}
+.abar{display:flex;align-items:center;gap:10px;margin-top:8px;font-size:13px;font-weight:600}
+.abar .l{width:120px;flex:none}
+.abar .tr{flex:1;display:flex;gap:4px}
+.abar .tr i{flex:1;height:10px;border-radius:3px;border:1.5px solid var(--ink);background:var(--card)}
+.abar .tr i.on{background:var(--accent)}
+.abar .tr i.half{background:linear-gradient(90deg,var(--accent) 50%,var(--card) 50%)}
+.driver{display:inline-block;background:var(--accent);color:#fff;border:1.5px solid var(--ink);border-radius:6px;font-size:10px;font-weight:700;padding:1px 6px;margin-left:6px;vertical-align:1px;text-transform:uppercase;letter-spacing:.4px}
 .toast{position:absolute;left:50%;bottom:90px;transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--paper);padding:10px 16px;border-radius:12px;font-size:14px;font-weight:600;opacity:0;transition:.25s;z-index:9;pointer-events:none;white-space:nowrap}
 .toast.show{opacity:1;transform:translateX(-50%)}
 .mini{position:absolute;left:12px;right:12px;bottom:84px;display:none;align-items:center;gap:10px;padding:8px 10px;z-index:4}
@@ -246,6 +264,8 @@ const TIERS = {
   nope: { label: 'Not for me', hint: 'Skip, every time', color: 'var(--nope)', range: [0, 3.3], key: '3' },
 };
 const ORDER = ['love', 'fine', 'nope'];
+const ASPECTS = [['vocals', 'Vocals', 'Voice, delivery, harmonies'], ['lyrics', 'Lyrics', 'Words that hit'], ['beat', 'Beat & production', 'Sound, mix, the drop'], ['feels', 'Emotional hit', 'How hard it lands'], ['replay', 'Replay value', 'Still good on play #50']];
+const MOODS = ['Late night', 'Main character', 'In my feels', 'Gym', 'Party', 'Road trip', 'Focus', 'Sunday morning', 'Heartbreak', 'Hype'];
 let state = { name: 'You', ranked: [], picks: 0, log: [] };
 try { const s = JSON.parse(localStorage.getItem('lilt')); if (s && Array.isArray(s.ranked)) state = { ...state, ...s }; } catch (e) {}
 let blind = true;
@@ -454,7 +474,37 @@ function chooseTier(tier) {
   f.offset = start === -1 ? state.ranked.length : start;
   f.lo = 0; f.hi = state.ranked.filter(x => x.tier === tier).length;
   f.total = Math.ceil(Math.log2(f.hi + 1)); f.done = 0;
-  nextDuel();
+  drawWhy();
+}
+// step 2: the in-depth breakdown (what makes it hit + when you play it)
+function drawWhy() {
+  const f = flow, s = f.song; f.step = 'why';
+  s.aspects = s.aspects || {}; s.moods = s.moods || [];
+  openSheet(`
+    <div style="display:flex;gap:12px;align-items:center">
+      <div data-vinyl="${s.id}" class="vinyl" style="width:56px;height:56px;margin:0;flex:none" onclick="toggleFlowPlay()"><img src="${esc(s.cover)}" style="width:22px;height:22px;border-width:1px" alt=""></div>
+      <div style="min-width:0"><div class="t">${esc(s.title)}</div><div class="a">${esc(s.artist)}${s.tier ? ` · <span class="${s.tier}" style="font-weight:700">${TIERS[s.tier].label}</span>` : ''}</div></div>
+    </div>
+    <h2 style="margin-top:18px">What makes it hit?</h2>
+    <div class="sub">Rate what matters to you. Leave anything blank.</div>
+    <div class="box" style="padding:4px 14px;margin-top:12px">${ASPECTS.map(([k, l, h]) => `
+      <div class="asp"><span>${l}<small>${h}</small></span><div class="dots" data-asp="${k}">${[1, 2, 3, 4, 5].map(n => `<button data-n="${n}" class="${(s.aspects[k] || 0) >= n ? 'on' : ''}" aria-label="${l} ${n}"></button>`).join('')}</div></div>`).join('')}</div>
+    <div style="font-family:var(--display);font-weight:700;font-size:18px;margin:18px 0 10px">When do you play it?</div>
+    <div class="moodchips">${MOODS.map(m => `<button class="pill ${s.moods.includes(m) ? 'on' : ''}" data-mood="${esc(m)}">${m}</button>`).join('')}</div>
+    <div style="display:flex;gap:10px;margin-top:20px">${f.editOnly ? '' : '<button class="cta ghost" id="skipWhy">Skip</button>'}<button class="cta" id="nextWhy" style="flex:1">${f.editOnly ? 'Save' : f.hi ? 'Next: blind duels →' : 'Place it →'}</button></div>`);
+  $('#sheet').querySelectorAll('[data-asp]').forEach(row => row.onclick = e => {
+    const b = e.target.closest('[data-n]'); if (!b) return;
+    const k = row.dataset.asp, n = +b.dataset.n;
+    s.aspects[k] = s.aspects[k] === n ? 0 : n; // tap the same dot again to clear
+    row.querySelectorAll('button').forEach(x => x.classList.toggle('on', +x.dataset.n <= s.aspects[k]));
+  });
+  $('#sheet').querySelectorAll('[data-mood]').forEach(b => b.onclick = () => {
+    const m = b.dataset.mood; s.moods = s.moods.includes(m) ? s.moods.filter(x => x !== m) : [...s.moods, m];
+    b.classList.toggle('on');
+  });
+  const next = () => { if (f.editOnly) { save(); flow = null; openDetail(s); } else { f.step = 'duel'; nextDuel(); } };
+  $('#nextWhy').onclick = next;
+  if ($('#skipWhy')) $('#skipWhy').onclick = next;
 }
 function nextDuel() {
   const f = flow;
@@ -531,6 +581,7 @@ function finishRank() {
 }
 document.addEventListener('keydown', e => {
   if (e.target.matches('input,textarea') && !$('#sheet').classList.contains('show')) return;
+  if (flow && flow.step === 'why' && e.key === 'Enter') { e.preventDefault(); $('#nextWhy').click(); return; }
   if (flow && flow.step === 'tier') { const k = ORDER.find(t => TIERS[t].key === e.key); if (k) chooseTier(k); }
   else if (flow && flow.step === 'duel') {
     if (e.key === 'ArrowLeft') pick(0); else if (e.key === 'ArrowRight') pick(1);
@@ -555,26 +606,36 @@ function openDetail(s) {
       <div class="fact"><b>${s.year || '–'}</b><span>Released</span></div>
     </div>
     <div class="gtags">${s.genres.map(g => `<span class="gtag">${esc(g)}</span>`).join('')}<span class="gtag" style="background:var(--butter)">Deezer rank ${(s.rank || 0).toLocaleString()}</span></div>
-    <div style="display:flex;gap:10px;margin-top:20px"><button class="cta ghost" style="flex:1" id="rm">Remove</button><button class="cta" style="flex:1" id="rr">Re-rank</button></div>
+    <div class="box" style="padding:12px 14px;margin-top:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center"><b style="font-family:var(--display)">Why it hits</b><button class="pill" id="ew">Edit</button></div>
+      ${ASPECTS.some(([k]) => s.aspects?.[k]) ? ASPECTS.filter(([k]) => s.aspects?.[k]).map(([k, l]) => `<div class="abar"><div class="l">${l}</div><div class="tr">${[1, 2, 3, 4, 5].map(n => `<i class="${n <= s.aspects[k] ? 'on' : ''}"></i>`).join('')}</div></div>`).join('') : '<div class="sub" style="margin-top:6px">No breakdown yet. Tap Edit to add one.</div>'}
+      ${s.moods?.length ? `<div class="moodchips" style="margin-top:12px">${s.moods.map(m => `<span class="pill on">${esc(m)}</span>`).join('')}</div>` : ''}
+    </div>
+    <div style="display:flex;gap:10px;margin-top:14px"><button class="cta ghost" style="flex:1" id="rm">Remove</button><button class="cta" style="flex:1" id="rr">Re-rank</button></div>
     <p class="playhint">Re-rank later to track how your taste drifts.</p>`);
   $('#rm').onclick = () => { state.ranked.splice(state.ranked.indexOf(s), 1); save(); closeSheet(); toast('Removed'); };
+  $('#ew').onclick = () => { flow = { song: s, editOnly: true }; drawWhy(); };
   $('#rr').onclick = () => { const from = state.ranked.indexOf(s) + 1; state.ranked.splice(from - 1, 1); startRank(s, from); };
 }
 
 /* ---------------- MY LIST ---------------- */
-let filter = 'all';
+let filter = 'all', moodF = null;
 function renderLists() {
   const all = state.ranked;
-  const shown = filter === 'all' ? all : all.filter(s => s.tier === filter);
+  const shown = all.filter(s => (filter === 'all' || s.tier === filter) && (!moodF || (s.moods || []).includes(moodF)));
+  const moodCounts = MOODS.map(m => [m, all.filter(s => (s.moods || []).includes(m)).length]).filter(([, c]) => c);
   $('#screen').innerHTML = `
     <h2>My list</h2><div class="sub">${all.length} songs · ranked by you, scored by lilt</div>
     <div class="seg">${[['all', 'All'], ...ORDER.map(k => [k, TIERS[k].label])].map(([k, l]) => `<button class="pill ${filter === k ? 'on' : ''}" data-f="${k}">${l} ${k === 'all' ? all.length : all.filter(s => s.tier === k).length}</button>`).join('')}</div>
-    ${shown.length ? `<div class="box" style="padding:2px 14px">${shown.map(s => `
-      <div class="row" data-open="${s.id}"><div class="n">${all.indexOf(s) + 1}</div><img src="${esc(s.cover)}" alt="">
+    ${moodCounts.length ? `<div class="sub" style="font-weight:600;margin-top:4px">Vibe lists</div><div class="seg" style="margin-top:6px">${moodCounts.map(([m, c]) => `<button class="pill ${moodF === m ? 'on' : ''}" data-m="${esc(m)}" style="white-space:nowrap">${esc(m)} ${c}</button>`).join('')}</div>` : ''}
+    ${moodF ? `<div style="font-family:var(--display);font-weight:800;font-size:19px;margin:10px 0 8px">Your best “${esc(moodF)}” songs</div>` : ''}
+    ${shown.length ? `<div class="box" style="padding:2px 14px">${shown.map((s, i) => `
+      <div class="row" data-open="${s.id}"><div class="n">${moodF ? i + 1 : all.indexOf(s) + 1}</div><img src="${esc(s.cover)}" alt="">
         <div class="m"><div class="t">${esc(s.title)}</div><div class="a">${esc(s.artist)}${s.genres[0] ? ' · ' + esc(s.genres[0]) : ''}${s.year ? ' · ' + s.year : ''}</div></div>
         ${bubble(s)}</div>`).join('')}</div>`
       : `<div class="empty"><div class="wm">0<b>.</b></div>Nothing here yet.<br><button class="cta" style="margin-top:14px" data-go-tab="search">Rank your first song</button></div>`}`;
   $('#screen').querySelectorAll('[data-f]').forEach(b => b.onclick = () => { filter = b.dataset.f; renderLists(); });
+  $('#screen').querySelectorAll('[data-m]').forEach(b => b.onclick = () => { moodF = moodF === b.dataset.m ? null : b.dataset.m; renderLists(); });
 }
 
 /* ---------------- TASTE PROFILE ---------------- */
@@ -609,12 +670,24 @@ function renderMe() {
   const buckets = Array(10).fill(0); bpms.forEach(b => buckets[Math.min(9, Math.max(0, Math.floor((b - 60) / 12)))]++);
   const bmax = Math.max(1, ...buckets);
   const gem = list.filter(s => s.tier === 'love').sort((a, b) => (a.rank || 0) - (b.rank || 0))[0];
+  // what you rank for: aspect averages, and which aspect best predicts your scores (correlation)
+  const rated = list.filter(s => s.aspects && ASPECTS.some(([k]) => s.aspects[k]));
+  const asp = ASPECTS.map(([k, l]) => {
+    const pts = rated.filter(s => s.aspects[k]).map(s => [s.aspects[k], sc.get(s.id)]);
+    const avg = pts.length ? pts.reduce((t, [a]) => t + a, 0) / pts.length : 0;
+    let r = null;
+    if (pts.length >= 3) { const mx = avg, my = pts.reduce((t, [, b]) => t + b, 0) / pts.length; let sxy = 0, sxx = 0, syy = 0; pts.forEach(([a, b]) => { sxy += (a - mx) * (b - my); sxx += (a - mx) ** 2; syy += (b - my) ** 2; }); r = sxx && syy ? sxy / Math.sqrt(sxx * syy) : null; }
+    return { k, l, avg, r, n: pts.length };
+  }).filter(a => a.n);
+  const drv = asp.filter(a => a.r != null).sort((a, b) => b.r - a.r)[0] || [...asp].sort((a, b) => b.avg - a.avg)[0];
+  const moodTop = MOODS.map(m => [m, list.filter(s => (s.moods || []).includes(m))]).filter(([, a]) => a.length).sort((a, b) => b[1].length - a[1].length).slice(0, 4);
   const drifts = state.log.filter(l => l.from != null && byId(l.id)).slice(-4).reverse();
   $('#screen').innerHTML = `
     <div class="top"><h2 style="margin:0">Your taste</h2><button class="pill" id="nm">${esc(state.name)} ✎</button></div>
     <div class="poster"><div class="rings"></div>
       <div class="k">${state.name === 'You' ? 'Your' : esc(state.name) + '’s'} music personality</div>
       <div class="persona">${persona(p)}</div>
+      ${drv ? `<div style="font-size:14px;margin:-4px 0 12px;opacity:.9">Ranks songs on <b style="color:var(--butter)">${drv.l.toLowerCase()}</b> first</div>` : ''}
       <div class="cov3">${list.slice(0, 5).map(s => `<img src="${esc(s.cover)}" alt="">`).join('')}</div>
     </div>
     <div class="statrow"><div class="box stat"><b>${list.length}</b><span>ranked</span></div><div class="box stat"><b>${state.picks}</b><span>duels</span></div><div class="box stat"><b>${fmt(avg)}</b><span>avg score</span></div></div>
@@ -625,6 +698,9 @@ function renderMe() {
     <div class="box metric"><div class="k">Your era</div><div class="v">${p.year ? Math.floor(p.year / 10) * 10 + 's' : '–'}</div><div class="sub">${p.year ? 'Weighted average release year: ' + p.year : ''}</div></div>
     <div class="box metric"><div class="k">Top genres</div>${p.genres.slice(0, 5).map(([n, v]) => `<div class="gbar"><div class="l">${esc(n)}</div><div class="tr"><div class="f" data-w="${Math.round(100 * v / gmax)}"></div></div></div>`).join('') || '<div class="sub">Loading genres…</div>'}</div>
     ${gem ? `<div class="box metric" data-open="${gem.id}" style="display:flex;gap:12px;align-items:center;cursor:pointer;background:var(--butter)"><img src="${esc(gem.cover)}" style="width:52px;height:52px;border-radius:10px;border:1.5px solid var(--ink)" alt=""><div style="flex:1;min-width:0"><div class="k" style="color:var(--ink)">Hidden gem you love</div><div class="t">${esc(gem.title)}</div><div class="a">${esc(gem.artist)} · least-streamed song in your loved tier</div></div></div>` : ''}
+    <h3>What you rank for <small>${rated.length} songs broken down</small></h3>
+    <div class="box metric" style="margin-top:0">${asp.length ? asp.map(a => `<div class="abar"><div class="l">${a.l}${a === drv ? '<span class="driver">Driver</span>' : ''}</div><div class="tr">${[1, 2, 3, 4, 5].map(n => `<i class="${n <= Math.round(a.avg) ? 'on' : ''}"></i>`).join('')}</div></div>`).join('') + (drv && drv.r != null ? `<div class="sub" style="margin-top:10px">Your ${drv.l.toLowerCase()} rating tracks your rankings most closely, so it's the thing that moves a song up your list.</div>` : `<div class="sub" style="margin-top:10px">Break down 3+ songs to find what actually moves a song up your list.</div>`) : '<div class="sub">Rate vocals, lyrics, beat and more when you rank a song to see what drives your taste.</div>'}</div>
+    ${moodTop.length ? `<h3>Your go-to moods</h3><div class="box" style="padding:2px 14px">${moodTop.map(([m, a]) => `<div class="row" data-open="${a[0].id}"><img src="${esc(a[0].cover)}" alt=""><div class="m"><div class="t">${esc(m)}</div><div class="a">${a.length} song${a.length === 1 ? '' : 's'} · top pick: ${esc(a[0].title)}</div></div></div>`).join('')}</div>` : ''}
     <h3>Top artists</h3><div class="box" style="padding:2px 14px">${p.artists.slice(0, 3).map(([a], i) => { const s = list.find(x => x.artist === a); return `<div class="row" data-open="${s.id}"><div class="n">${i + 1}</div><img src="${esc(s.cover)}" style="border-radius:50%" alt=""><div class="m"><div class="t">${esc(a)}</div><div class="a">${list.filter(x => x.artist === a).length} ranked</div></div></div>`; }).join('')}</div>
     <h3>Taste drift <small>songs you re-ranked</small></h3>
     <div class="box" style="padding:2px 14px">${drifts.length ? drifts.map(l => { const s = byId(l.id), d = l.from - l.to; return `<div class="row" data-open="${s.id}"><img src="${esc(s.cover)}" alt=""><div class="m"><div class="t">${esc(s.title)}</div><div class="a">#${l.from} → #${l.to} · ${ago(l.ts)}</div></div><div class="drift ${d > 0 ? 'up' : d < 0 ? 'down' : ''}">${d > 0 ? '▲' + d : d < 0 ? '▼' + (-d) : '='}</div></div>`; }).join('') : '<div class="empty" style="padding:16px">Open any song and tap Re-rank to see how your taste moves.</div>'}</div>
